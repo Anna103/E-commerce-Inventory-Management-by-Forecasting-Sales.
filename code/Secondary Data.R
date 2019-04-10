@@ -307,6 +307,6 @@ str(brazilEcon)
 brazilEcon
 
 # Write brazilEcon data frame to .csv file
-write.csv(brazilEcon, file = "brazilEcon.csv", row.names = FALSE)
+write.csv(brazilEcon, file = "FeatureEng/brazilEcon.csv", row.names = FALSE)
 
 read.csv("brazilEcon.csv")

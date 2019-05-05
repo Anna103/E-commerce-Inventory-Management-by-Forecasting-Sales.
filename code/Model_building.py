@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt, mpld3
 import math
 from datetime import datetime
 import seaborn as sns
+from time import gmtime, strftime
 
 
 # In[14]:
@@ -316,7 +317,7 @@ def prophet_model(seller_id,prod_cat_i):
     prophet_model = Prophet(changepoint_prior_scale=0.8,weekly_seasonality=True,yearly_seasonality=True,holidays=holidays)
     
     prophet_model.fit(train)
-    
+    plt.clf()
     
     ## set the extended periods as present in the test data
     predict = prophet_model.make_future_dataframe(periods=diff.days)
@@ -329,7 +330,9 @@ def prophet_model(seller_id,prod_cat_i):
     ## plot the prophet forecasts to gain perspective on sales
     forecast = prophet_model.predict(pd.DataFrame(predict))
     fig1 = prophet_model.plot(forecast)
-    
+    dat=strftime("%Y-%m-%d%H:%M", gmtime())
+    filename='static/predicted%s.png'%str(dat)
+    plt.savefig(filename)
     fig2 = prophet_model.plot_components(forecast)
       
     ## Predicted Count on the test
@@ -351,15 +354,17 @@ def prophet_model(seller_id,prod_cat_i):
     Average_sales=("Average Sales = "+str(average))
     Actual_count=("Actual count = "+str(actual_count))
     Predicted_revenue=("Predicted revenue = "+str(predicted_revenue))
-    Actual_revenue=("Actual revenue "+str(actual_revenue))   
+    Actual_revenue=("Actual revenue = "+str(actual_revenue))   
     print("Percentage error in calculating revenue",(abs(actual_revenue - predicted_revenue)/actual_revenue)*100)    
     print("Root Mean Squared for this model is", rmse)    
     html =  "<html>\n<head></head>\n<title>Predictions</title><style>body {background-image: url(\"../static/background_m.jpg\");})</style><body>"
     html+=Pred_count+"<br>"+Average_sales+"<br>"+Actual_count+"<br>"+Predicted_revenue+"<br>"+Actual_revenue
-    
+    write_html=("<br>\n\n\n<img src=../%s></body>\n</html>"%str(filename))
+    print("Write html",write_html)
     htmlfile="templates/Prediction.html"
+    html=html+write_html
     with open(htmlfile, 'w') as f:
-        f.write(html + "\n</body>\n</html>")
+        f.write(html)
 
 
 # In[36]:

@@ -313,7 +313,7 @@ def prophet_model(seller_id,prod_cat_i):
   'lower_window': -1,
   'upper_window': 1,
 })
-    prophet_model = Prophet(changepoint_prior_scale=0.8,weekly_seasonality=True,holidays=holidays)
+    prophet_model = Prophet(changepoint_prior_scale=0.8,weekly_seasonality=True,yearly_seasonality=True,holidays=holidays)
     
     prophet_model.fit(train)
     

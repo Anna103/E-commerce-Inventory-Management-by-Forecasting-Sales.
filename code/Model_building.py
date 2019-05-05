@@ -19,7 +19,7 @@ import seaborn as sns
 
 
 from understanding_data import seller_monthly_transaction_count_line_graph
-from understanding_data import seller_biweekly_transaction_count_line_graph
+#from understanding_data import seller_biweekly_transaction_count_line_graph
 
 
 # In[15]:
@@ -47,7 +47,7 @@ def getInformation(s_id):
     dataseller = sellerdf['product_category_name_english'].value_counts()
     dataseller_df = pd.DataFrame(data=dataseller)
     dataseller_df.rename(columns={'product_category_name_english':'sales per product category'},inplace=True)
-    print(dataseller_df)
+    dataseller_df.to_html('templates/getInformation.html')
 
 def getDashboard(s_id):
     sellerdf, unique_prod_categories = getData(s_id)
@@ -75,6 +75,8 @@ def getData(s_id):
        'seller_state', 'product_name_lenght', 'product_description_lenght',
        'customer_unique_id','Bi-Weekly','datediff_purchase_deliver'],axis=1)
     unique = new_data['product_category_name_english'].unique()
+    print("UNI")
+    print(unique)
     pd.DataFrame(unique).to_html('templates/getData.html')
     return new_data, unique
 
@@ -123,7 +125,7 @@ def check_reviews(seller,prod_cat_i):
 # In[22]:
 
 
-check_reviews('289cdb325fb7e7f891c38608bf9e0962','perfumery')
+#check_reviews('289cdb325fb7e7f891c38608bf9e0962','perfumery')
 
 
 # In[23]:
@@ -159,13 +161,38 @@ def Gradient_Boosting_Model(seller_id):
     x_test = model_test.drop(columns = 'count',axis = 1)
     y_test = model_test['count']
 
+    learning_rate = [0.01,0.03,0.05,0.07,0.09]
+    min_samples_split = [2,3,4]
+    min_samples_leaf = [1,2]
+    max_depth = [2,3,4]
     
-    params = {'n_estimators': 200, 'min_samples_split': 3,'learning_rate': 0.1, 'loss': 'ls','verbose':1}
-    clf = ensemble.GradientBoostingRegressor()
+    ## Grid Search for hyper parameter tuning
+    mse_min = 9999
+    lr_min = 0.01
+    min_samples_split_min = 2
+    min_samples_leaf_min = 1
+    max_depth_min = 2
+    for lr in learning_rate:
+        for mss in min_samples_split:
+            for msl in min_samples_leaf:
+                for md in max_depth:
+                    params = {'min_samples_split':mss,'learning_rate': lr, 'verbose':0,'max_depth':md,'min_samples_leaf':msl}
+                    clf = ensemble.GradientBoostingRegressor(**params)
+                    clf.fit(x_train, y_train)
+                    mse = mean_squared_error(y_test, clf.predict(x_test))
+                    
+                    if mse < mse_min:
+                        mse_min = mse 
+                        lr_min = lr
+                        min_samples_split_min = mss
+                        min_samples_leaf_min = msl
+                        max_depth_min = md
+                        
+    print("Best RMSE is ",math.sqrt(mse_min),"for ",lr_min,min_samples_split_min,min_samples_leaf_min,max_depth_min)
+    params = {'min_samples_split':min_samples_split_min,'learning_rate': lr_min, 'verbose':0,'max_depth':max_depth_min,'min_samples_leaf':min_samples_leaf_min}
+    clf = ensemble.GradientBoostingRegressor(**params)
     clf.fit(x_train, y_train)
-    mse = mean_squared_error(y_test, clf.predict(x_test))
-    print("MSE: %.4f" % mse)
-
+    
 
     test_score = np.zeros((100,), dtype=np.float64)
 
@@ -218,7 +245,7 @@ def Gradient_Boosting_Model(seller_id):
 # In[24]:
 
 
-Gradient_Boosting_Model('6560211a19b47992c3666cc44a7e94c0')
+#Gradient_Boosting_Model('6560211a19b47992c3666cc44a7e94c0')
 
 ## This is found to be the best model of all that we have tried.
 ## Type garden_tools when asked for category
@@ -227,7 +254,7 @@ Gradient_Boosting_Model('6560211a19b47992c3666cc44a7e94c0')
 # In[ ]:
 
 
-Gradient_Boosting_Model('6560211a19b47992c3666cc44a7e94c0')
+#Gradient_Boosting_Model('6560211a19b47992c3666cc44a7e94c0')
 ## This doesn't perform well and the prediction is way off for this model. We'll probably need to build a separate model for such cases
 
 ## Enter watches_gifts when asked for category
@@ -249,12 +276,18 @@ def prophet_model(seller_id,prod_cat_i):
     #category = input('Enter Product Category you want to analyze:')
     model_data = model_data[model_data['product_category_name_english']==prod_cat_i]
     
+    if model_data.shape[0]<300:
+        print("Not enough data to fit the model")
     ## Extract date from order_purchase_timestamp
     model_data['order_purchase_timestamp'] = model_data['order_purchase_timestamp'].apply(lambda x: x.date()).astype('str')
     model_data['order_purchase_timestamp'] = pd.to_datetime(model_data['order_purchase_timestamp'])
     
     seller_count = model_data.groupby(['order_purchase_timestamp']).size().reset_index(name='count')
-    model_data = pd.merge(model_data, seller_count, how='right',left_on=['order_purchase_timestamp'],right_on=['order_purchase_timestamp'],copy=False)
+    
+    ## Calculate price for reveue calculation
+    price = model_data['price'].mean()
+    
+    model_data = pd.merge(model_data, seller_count, how='inner',left_on=['order_purchase_timestamp'],right_on=['order_purchase_timestamp'],copy=False)
 
     model_data = model_data.drop_duplicates(keep='first',subset = 'order_purchase_timestamp')
     
@@ -262,9 +295,11 @@ def prophet_model(seller_id,prod_cat_i):
     seller.columns  = ['ds','y']
     
     
-    ## Split into train and test based on last 30 
-    train = seller[:-30]
-    test = seller[-30:]
+    ## Split into train and test based on last 30 sales days
+    number_of_obs = seller.shape[0]
+    split = 30
+    train = seller[:-split]
+    test = seller[-split:]
     
     end = test['ds'].iloc[-1]
     start = test['ds'].iloc[0]
@@ -278,7 +313,7 @@ def prophet_model(seller_id,prod_cat_i):
   'lower_window': -1,
   'upper_window': 1,
 })
-    prophet_model = Prophet(changepoint_prior_scale=0.5,weekly_seasonality=True,holidays=holidays)
+    prophet_model = Prophet(changepoint_prior_scale=0.8,weekly_seasonality=True,holidays=holidays)
     
     prophet_model.fit(train)
     
@@ -286,41 +321,45 @@ def prophet_model(seller_id,prod_cat_i):
     ## set the extended periods as present in the test data
     predict = prophet_model.make_future_dataframe(periods=diff.days)
     
-    forecast = prophet_model.predict(predict)
-    
+    forecast = prophet_model.predict(pd.DataFrame(test['ds']))
     forecast_tail = forecast[['ds','yhat','yhat_lower','yhat_upper']]
     
-    ## plot the prophet forecasts
+    rmse = math.sqrt(mean_squared_error(test['y'],forecast_tail['yhat']))
+    
+    ## plot the prophet forecasts to gain perspective on sales
+    forecast = prophet_model.predict(pd.DataFrame(predict))
     fig1 = prophet_model.plot(forecast)
     
     fig2 = prophet_model.plot_components(forecast)
     
     ## Count extra number of days in training 
-    diff_train = (train['ds'].iloc[-1] - train['ds'].iloc[0]).days
+    #diff_train = (train['ds'].iloc[-1] - train['ds'].iloc[0]).days
     
-    extra_days_test = math.floor(((diff_train-train.shape[0])/train.shape[0])*30)    
+    #extra_days_test = math.floor(((diff_train-train.shape[0])/train.shape[0])*30)    
     ## Predicted Count on the test
     predicted_count  = np.ceil(np.sum(forecast_tail[-diff.days:]['yhat']))
-    
+    print("Predictted Count",predicted_count)
     ## Average number of sales predicted per day
-    average = math.floor(train['y'].median())
+    average = round(test['y'].mean())
     
     
     ## Remove the extra count values coming from extra days
-    predicted_count = predicted_count - extra_days_test*average
+    #predicted_count = predicted_count - extra_days_test*average
     
     ## Actual count of the test set
     actual_count = np.sum(test['y'])
     
+    actual_revenue = actual_count *price
+    predicted_revenue = predicted_count * price 
     Pred_count=("Predicted count = "+str(predicted_count))
     Average_sales=("Average Sales = "+str(average))
     Actual_count=("Actual count = "+str(actual_count))
-    
-    
-    
-    
-    html =  "<html>\n<head></head>\n<title>Predictions</title><body>"
-    html+=Pred_count+"<br>"+Average_sales+"<br>"+Actual_count
+    Predicted_revenue=("Predicted revenue = "+str(predicted_revenue))
+    Actual_revenue=("Actual revenue "+str(actual_revenue))   
+    print("Percentage error in calculating revenue",(abs(actual_revenue - predicted_revenue)/actual_revenue)*100)    
+    print("Root Mean Squared for this model is", rmse)    
+    html =  "<html>\n<head></head>\n<title>Predictions</title><style>body {background-image: url(\"../static/background_m.jpg\");})</style><body>"
+    html+=Pred_count+"<br>"+Average_sales+"<br>"+Actual_count+"<br>"+Predicted_revenue+"<br>"+Actual_revenue
     
     htmlfile="templates/Prediction.html"
     with open(htmlfile, 'w') as f:
@@ -330,5 +369,5 @@ def prophet_model(seller_id,prod_cat_i):
 # In[36]:
 
 
-prophet_model('6560211a19b47992c3666cc44a7e94c0','watches_gifts')
+#prophet_model('6560211a19b47992c3666cc44a7e94c0','watches_gifts')
 

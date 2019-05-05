@@ -331,11 +331,7 @@ def prophet_model(seller_id,prod_cat_i):
     fig1 = prophet_model.plot(forecast)
     
     fig2 = prophet_model.plot_components(forecast)
-    
-    ## Count extra number of days in training 
-    #diff_train = (train['ds'].iloc[-1] - train['ds'].iloc[0]).days
-    
-    #extra_days_test = math.floor(((diff_train-train.shape[0])/train.shape[0])*30)    
+      
     ## Predicted Count on the test
     predicted_count  = np.ceil(np.sum(forecast_tail[-diff.days:]['yhat']))
     print("Predictted Count",predicted_count)
